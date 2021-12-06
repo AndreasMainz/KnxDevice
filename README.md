@@ -28,6 +28,6 @@ KnxComObject KnxDevice::_comObjectsList[] = {
   
   additional global vars are defined: (should be added to your sketch)
   
-  uint8_t Ga_data[20]; // holding the raw data received
-  uint16_t Ga_int;     // holding the group address of the received message
+  * uint8_t Ga_data[20]; // holding the raw data received
+  * uint16_t Ga_int;     // holding the group address of the received message
   
