@@ -30,4 +30,12 @@ KnxComObject KnxDevice::_comObjectsList[] = {
   
   * uint8_t Ga_data[20]; // holding the raw data received
   * uint16_t Ga_int;     // holding the group address of the received message
+
+## Changes in detail
+
+* for the rx State Machine i added a new state: RX_EIB_TELEGRAM_RECEPTION_OWN_MESSAGE
+to distinguish between own message which was send some ms before and the messages which havn't be addressed to the device.
+Both had been mapped to RX_EIB_TELEGRAM_RECEPTION_NOT_ADDRESSED before, now it is separated.
+
+* The messages going to RX_EIB_TELEGRAM_RECEPTION_NOT_ADDRESSED are now mapped to the already existing Comobject index 0
   
