@@ -26,6 +26,7 @@
 #define KNXTELEGRAM_H
 
 #include "Arduino.h"
+extern uint8_t Ga_data[20]; //qwq
 
 // ---------- Knx Telegram description (visit "www.knx.org" for more info) -----------
 // => Length : 9 bytes min. to 23 bytes max.
@@ -131,7 +132,7 @@ class KnxTelegram {
         byte _payloadChecksum[KNX_TELEGRAM_PAYLOAD_MAX_SIZE-1]; // byte 8 to 22
       };
     };
-
+  // Der Datentyp DPT für ein Telegramm wird vom User angegeben und steht nicht im Telegramm selbst !!
   public:
   // CONSTRUCTOR
     // builds telegram with following default values :
@@ -286,7 +287,7 @@ inline byte KnxTelegram::ReadRawByte(byte byteIndex) const
 { return _telegram[byteIndex];}
 
 inline void KnxTelegram::WriteRawByte(byte data, byte byteIndex)
-{ _telegram[byteIndex] = data;}
+{ _telegram[byteIndex] = data; Ga_data[byteIndex] = data;} //qwq
 
 inline byte KnxTelegram::GetChecksum(void) const 
 { return (_payloadChecksum[GetPayloadLength() - 1]);}

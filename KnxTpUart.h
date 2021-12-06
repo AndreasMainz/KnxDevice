@@ -38,8 +38,8 @@
 
 // !!!!!!!!!!!!!!! FLAG OPTIONS !!!!!!!!!!!!!!!!!
 // DEBUG :
-// #define KNXTPUART_DEBUG_INFO   // Uncomment to activate info traces
-// #define KNXTPUART_DEBUG_ERROR  // Uncomment to activate error traces
+#define KNXTPUART_DEBUG_INFO   // Uncomment to activate info traces
+#define KNXTPUART_DEBUG_ERROR  // Uncomment to activate error traces
 
 
 // Values returned by the KnxTpUart member functions :
@@ -106,7 +106,8 @@ enum e_TpUartRxState {
   RX_EIB_TELEGRAM_RECEPTION_STARTED,        // Telegram reception started (address evaluation not done yet)
   RX_EIB_TELEGRAM_RECEPTION_ADDRESSED,      // Addressed telegram reception ongoing
   RX_EIB_TELEGRAM_RECEPTION_LENGTH_INVALID, // The telegram being received is too long
-  RX_EIB_TELEGRAM_RECEPTION_NOT_ADDRESSED   // Tegram reception ongoing but not addressed
+  RX_EIB_TELEGRAM_RECEPTION_NOT_ADDRESSED,   // Tegram reception ongoing but not addressed
+  RX_EIB_TELEGRAM_RECEPTION_OWN_MESSAGE     // Was telegram from me ;-)
 };
 
 typedef struct {
@@ -268,7 +269,7 @@ static const char _debugErrorText[];
     void DEBUG_SendResetCommand(void);
     void DEBUG_SendStateReqCommand(void);
 
-  private:
+  // private:
 
   // Private INLINED functions (see definitions later in this file)
 #if defined(KNXTPUART_DEBUG_INFO)

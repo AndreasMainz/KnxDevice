@@ -34,7 +34,9 @@ const char KnxTpUart::_debugInfoText[] = "KNXTPUART INFO: ";
 const char KnxTpUart::_debugErrorText[] = "KNXTPUART ERROR: ";
 #endif
 
-
+extern uint8_t Ga_data[20]; //qwq
+extern uint16_t Ga_int; //qwq
+// extern const byte _comObjectsNb;    
 // Constructor
 KnxTpUart::KnxTpUart(HardwareSerial& serial, word physicalAddr, type_KnxTpUartMode mode)
 : _serial(serial), _physicalAddr(physicalAddr), _mode(mode)
@@ -81,7 +83,7 @@ KnxTpUart::~KnxTpUart()
 byte KnxTpUart::Reset(void)
 {
 word startTime, nowTime;
-byte attempts = 10;
+byte attempts = 15;
 
   if ( (_rx.state > RX_RESET) || (_tx.state > TX_RESET) ) 
   { // HOT RESET case
@@ -90,16 +92,19 @@ byte attempts = 10;
   }
 
   // CONFIGURATION OF THE ARDUINO USART WITH CORRECT FRAME FORMAT (19200, 8 bits, parity even, 1 stop bit)
-  _serial.begin(19200,SERIAL_8E1);
-  //_serial.begin(19200);
-  //UCSR1C = UCSR1C | B00100000; // Even Parity
+  #ifdef ESP8266
+    _serial.begin(19200, SERIAL_8E1);
+    _serial.swap();
+#else
+	_serial.begin(19200, SERIAL_8E1, 5,17); // ESP32 hack for knx server qwq
+#endif
   
   while(attempts--)
   { // we send a RESET REQUEST and wait for the reset indication answer
     // the sequence is repeated every sec as long as we do not get the reset indication 
     _serial.write(TPUART_RESET_REQ); // send RESET REQUEST
 
-    for (nowTime = startTime = (word) millis() ; TimeDeltaWord(nowTime,startTime) < 1000 /* 1 sec */ ; nowTime = (word)millis())
+    for (nowTime = startTime = (word) millis() ; TimeDeltaWord(nowTime,startTime) < 400 /* 1 sec */ ; nowTime = (word)millis()) //qwq 1000
     {
       if (_serial.available() > 0) 
       {
@@ -235,7 +240,7 @@ byte KnxTpUart::Init(void)
     // Call U_State.request-Service in order to have the field _stateIndication up-to-date
     _serial.write(TPUART_STATE_REQ);
 
-    _rx.state = RX_IDLE_WAITING_FOR_CTRL_FIELD;
+    _rx.state = RX_IDLE_WAITING_FOR_CTRL_FIELD; // Setze auf Prüfung erstes Byte
     _tx.state = TX_IDLE;
 #if defined(KNXTPUART_DEBUG_INFO)
     DebugInfo("Init : Normal mode started\n");
@@ -286,8 +291,9 @@ static word lastByteRxTimeMicrosec;
     nowTime = (word) micros(); // word cast because a 65ms looping counter is long enough
     if(TimeDeltaWord(nowTime,lastByteRxTimeMicrosec) > 2000 /* 2 ms */ )
     { // EOP detected, the telegram reception is completed
+	  // Serial.print("Telegram fertig: Daten: ");Serial.println(readBytesNb);
 
-      switch (_rx.state)
+      switch (_rx.state) // execute _rx State 1. Verarbeitung
       {
         case RX_EIB_TELEGRAM_RECEPTION_STARTED : // we are not supposed to get EOP now, the telegram is incomplete
         case RX_EIB_TELEGRAM_RECEPTION_LENGTH_INVALID :
@@ -307,13 +313,28 @@ static word lastByteRxTimeMicrosec;
           }
           break;
 
-        // case RX_EIB_TELEGRAM_RECEPTION_NOT_ADDRESSED : break; // nothing to do!
+        case RX_EIB_TELEGRAM_RECEPTION_NOT_ADDRESSED : // qwq nicht addressierte Telegramme sollen trotzdem mit Index 0 nach oben gegeben werden
+          { // checksum correct, let's update the _rx struct with the received telegram and correct index
+			 //Ga_data[0] = telegram.ReadRawByte(8);
+			 //Ga_data[1] = telegram.ReadRawByte(9);
+			 //Ga_data[2] = telegram.ReadRawByte(10);
+			 //Ga_data[3] = telegram.ReadRawByte(11);
+			 //Ga_data[4] = telegram.GetPayloadLength();
+
+        	telegram.Copy(_rx.receivedTelegram); //void KnxTelegram::Copy(KnxTelegram& dest) const
+            _rx.addressedComObjectIndex  = addressedComObjectIndex; //qwq was 14
+			 //Serial.print("Tpuart:Wert Index :");
+			 //Serial.println(addressedComObjectIndex);
+            _evtCallbackFct(TPUART_EVENT_RECEIVED_EIB_TELEGRAM); // Notify the new received telegram
+          }
+		break; // nothing to do!
       
         default : break; 
       } // end of switch
 
       // we move state back to RX IDLE in any case
-      _rx.state = RX_IDLE_WAITING_FOR_CTRL_FIELD;
+      _rx.state = RX_IDLE_WAITING_FOR_CTRL_FIELD; // nach dem Empfangs des letzten Bytes mit einer gro0en Pause geht er immer auf diesen State zurück
+	  // warten auf nächstes Telegramm
     } // end EOP detected
   }
   
@@ -323,14 +344,15 @@ static word lastByteRxTimeMicrosec;
     incomingByte = (byte)(_serial.read());
     lastByteRxTimeMicrosec = (word)micros();
 	
-    switch (_rx.state)
+    switch (_rx.state) // calculate Rx State depending of incoming message
     {
-      case RX_IDLE_WAITING_FOR_CTRL_FIELD:
+      case RX_IDLE_WAITING_FOR_CTRL_FIELD: // check first received byte Kontrollfeld
           // CASE OF EIB MESSAGE
-          if ((incomingByte & EIB_CONTROL_FIELD_PATTERN_MASK) == EIB_CONTROL_FIELD_VALID_PATTERN)
+          if ((incomingByte & EIB_CONTROL_FIELD_PATTERN_MASK) == EIB_CONTROL_FIELD_VALID_PATTERN) // 0x90 = BC (msg) oder 9C (wdh)
           {
             _rx.state = RX_EIB_TELEGRAM_RECEPTION_STARTED; 
-            readBytesNb = 1; telegram.WriteRawByte(incomingByte,0);
+            readBytesNb = 1; // 1. Byte empfangen
+			telegram.WriteRawByte(incomingByte,0); // und in _telegram gespeichert
           }
           // CASE OF TPUART_DATA_CONFIRM_SUCCESS NOTIFICATION
           else if (incomingByte == TPUART_DATA_CONFIRM_SUCCESS) 
@@ -396,25 +418,29 @@ static word lastByteRxTimeMicrosec;
              // we check whether the received EIB telegram is coming from us (i.e. telegram is sent by the TPUART itself)
             if ( telegram.GetSourceAddress() == _physicalAddr )
             { // the message is coming from us, we consider it as not addressed and we don't send any ACK service
-              _rx.state = RX_EIB_TELEGRAM_RECEPTION_NOT_ADDRESSED;
+              _rx.state = RX_EIB_TELEGRAM_RECEPTION_OWN_MESSAGE;
             }
           }
           else if (readBytesNb==6) // We have just read the routing field containing the address type and the payload length
           { // We check if the message is addressed to us in order to send the appropriate acknowledge
-            if(IsAddressAssigned(telegram.GetTargetAddress(), addressedComObjectIndex))
-            { // Message addressed to us
+		    //  boolean IsAddressAssigned(word addr, byte &index) const;
+            if ((IsAddressAssigned(telegram.GetTargetAddress(), addressedComObjectIndex))&&(addressedComObjectIndex)) // Das letzte Com Obj ist immer der GMonitor _comObjectsNb
+            { // Message addressed to us AND NOT Index 0
               _rx.state = RX_EIB_TELEGRAM_RECEPTION_ADDRESSED;
               //sent the correct ACK service now
               // the ACK info must be sent latest 1,7 ms after receiving the address type octet of an addressed frame
               _serial.write(TPUART_RX_ACK_SERVICE_ADDRESSED);
             }
             else
-            { // Message NOT addressed to us
+            { // Message NOT addressed to us or Index 0
               _rx.state = RX_EIB_TELEGRAM_RECEPTION_NOT_ADDRESSED;
               //sent the correct ACK service now
               // the ACK info must be sent latest 1,7 ms after receiving the address type octet of an addressed frame
               _serial.write(TPUART_RX_ACK_SERVICE_NOT_ADDRESSED);
+			  //_serial.write(TPUART_RX_ACK_SERVICE_ADDRESSED);
             }
+			Ga_int = telegram.GetTargetAddress(); //qwq
+			   		
           } 
           break;
 
@@ -422,13 +448,22 @@ static word lastByteRxTimeMicrosec;
           if (readBytesNb == KNX_TELEGRAM_MAX_SIZE) _rx.state = RX_EIB_TELEGRAM_RECEPTION_LENGTH_INVALID;
           else
           {
-          telegram.WriteRawByte(incomingByte,readBytesNb);
-          readBytesNb++;
+            telegram.WriteRawByte(incomingByte,readBytesNb); //_telegram[readBytesNb] = incomingByte;
+		    readBytesNb++;
           }
           break;
 
     //  case RX_EIB_TELEGRAM_RECEPTION_LENGTH_INVALID : break; // if the message is too long, nothing to do except waiting for EOP
-    //  case RX_EIB_TELEGRAM_RECEPTION_NOT_ADDRESSED : break; // if the message is not addressed, nothing to do except waiting for EOP
+      case RX_EIB_TELEGRAM_RECEPTION_NOT_ADDRESSED : 
+          if (readBytesNb == KNX_TELEGRAM_MAX_SIZE) _rx.state = RX_EIB_TELEGRAM_RECEPTION_LENGTH_INVALID;
+          else
+          { // Obwohl das Telegramm nicht für uns ist, wird es trotzdem in den Empfangspuffer kopiert !! GMonitor
+            telegram.WriteRawByte(incomingByte,readBytesNb); //_telegram[readBytesNb] = incomingByte;
+		    readBytesNb++;
+			// Serial.println("Not addressed Telegram Byted copied");
+          }
+	   
+	   break; // if the message is not addressed, nothing to do except waiting for EOP
 
       default : break;
     } // switch (_rx.state)
@@ -569,9 +604,13 @@ byte i, searchIndexStart, searchIndexStop, searchIndexRange;
   
   // search the address value and index in the reduced range
   for (i = searchIndexStart; ((_comObjectsList[_orderedIndexTable[i]].GetAddr() != addr) && (i <= searchIndexStop)); i++);
-  if (i > searchIndexStop) return false; // Address is NOT part of the assigned addresses
+  if (i > searchIndexStop) 
+  {	  
+      index = 0; // Setze auf GMonitor
+	  return false; // Address is NOT part of the assigned addresses
+  } 
   // Address is part of the assigned addresses
-  index = _orderedIndexTable[i];
+  index = _orderedIndexTable[i]; // Kann auch Index 0 sein, wenn die GA von GMonitor zufällig erkannt wurde
   return true;
 }
 

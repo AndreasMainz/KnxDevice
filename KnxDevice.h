@@ -120,13 +120,13 @@ class KnxDevice {
 #endif
 
   // Constructor, Destructor
-    KnxDevice();  // private constructor (singleton design pattern)
-    ~KnxDevice() {}  // private destructor (singleton design pattern)
-    KnxDevice (const KnxDevice&); // private copy constructor (singleton design pattern) 
+  //qwq KnxDevice();  // private constructor (singleton design pattern)
+  //~KnxDevice() {}  // private destructor (singleton design pattern)
+  //KnxDevice (const KnxDevice&); // private copy constructor (singleton design pattern) 
 
   public:
     static KnxDevice Knx; // unique KnxDevice instance (singleton design pattern)
-
+    KnxDevice(); //qwq Constructor in class defined
     // Start the KNX Device
     // return KNX_DEVICE_ERROR (255) if begin() failed
     // else return KNX_DEVICE_OK
@@ -142,6 +142,8 @@ class KnxDevice {
     // Quick method to read a short (<=1 byte) com object
     // NB : The returned value will be hazardous in case of use with long objects
     byte read(byte objectIndex);  
+	
+	word read_dest(byte objectIndex);
 
     // Read an usual format com object
     // Supported DPT formats are short com object, U16, V16, U32, V32, F16 and F32
