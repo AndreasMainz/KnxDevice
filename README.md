@@ -1,4 +1,4 @@
-# KNX Bus Device library for Arduino
+# KNX Bus Device library for Arduino with integrated Busmonitor
 
 ## Links :
 - [Blog](http://www.liwan.fr/KnxWithArduino/)
